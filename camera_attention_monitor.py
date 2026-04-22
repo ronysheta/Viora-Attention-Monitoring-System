@@ -394,7 +394,6 @@ if __name__ == "__main__":
         speak_fn=speak,
         camera_source=0,
         inactivity_threshold=15,
-        model_path="face_landmarker.task",
     )
  
     monitor.start()
