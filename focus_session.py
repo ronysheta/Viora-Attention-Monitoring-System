@@ -499,7 +499,10 @@ class FocusSession:
     def _stop_timer(self):
         if self._timer_thread and self._timer_thread.is_alive():
             self._timer_stop.set()
-            self._timer_thread.join(timeout=2)
+            # Don't join if we're already on the timer thread —
+            # happens when a callback (e.g. _on_break_end) starts a new block
+            if threading.current_thread() is not self._timer_thread:
+                self._timer_thread.join(timeout=2)
 
     def _focus_duration(self) -> int:
         if self.mode == "pomodoro":
