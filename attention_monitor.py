@@ -42,10 +42,13 @@ Usage:
 """
 
 import time
+import logging
 import threading
 from typing import Callable, Optional
 
 from accessibility_profile import PROMPTS, parse_confirmation
+
+logger = logging.getLogger(__name__)
 
 
 class AttentionMonitor:
@@ -88,7 +91,7 @@ class AttentionMonitor:
         self.response_window      = response_window
         self.key_presses_enabled  = key_presses_enabled
 
-        self._speak_fn = speak_fn or (lambda t: print(f"[AttentionMonitor] TTS: {t}"))
+        self._speak_fn = speak_fn or (lambda t: logger.info("[TTS] %s", t))
         self._stt_fn   = stt_fn   # None = no STT, rely on key presses only
 
         # ── State ──────────────────────────────────────────────────────────────
@@ -123,7 +126,7 @@ class AttentionMonitor:
             )
             self._stt_thread.start()
 
-        print("[AttentionMonitor] Started.")
+        logger.info("AttentionMonitor started.")
 
     def stop(self):
         """Stop all background threads cleanly."""
@@ -132,7 +135,7 @@ class AttentionMonitor:
             self._monitor_thread.join(timeout=2)
         if self._stt_thread:
             self._stt_thread.join(timeout=2)
-        print("[AttentionMonitor] Stopped.")
+        logger.info("AttentionMonitor stopped.")
 
     def register_interaction(self):
         """
@@ -149,14 +152,14 @@ class AttentionMonitor:
             if self._waiting_for_response:
                 self._response_received  = True
                 self._waiting_for_response = False
-                print("[AttentionMonitor] User responded to check-in. Timer reset.")
+                logger.debug("User responded to check-in. Timer reset.")
 
             if self._paused:
                 self._paused   = False
                 was_paused     = True
 
         if was_paused:
-            print("[AttentionMonitor] Session resumed.")
+            logger.info("Session resumed.")
             self._speak(PROMPTS["resume_prompt"])
             if self.on_resume:
                 self.on_resume()
@@ -182,11 +185,11 @@ class AttentionMonitor:
             try:
                 text = self._stt_fn()
             except Exception as e:
-                print(f"[AttentionMonitor] STT error: {e}")
+                logger.error("STT error: %s", e)
                 continue
 
             if text:
-                print(f"[AttentionMonitor] STT detected: '{text}'")
+                logger.debug("STT detected: '%s'", text)
                 self.register_interaction()
 
     # ── Internal monitoring loop ───────────────────────────────────────────────
@@ -209,7 +212,7 @@ class AttentionMonitor:
 
     def _trigger_checkin(self):
         """Play check-in prompt and wait for voice or key response."""
-        print("[AttentionMonitor] Inactivity threshold reached. Playing check-in.")
+        logger.info("Inactivity threshold reached. Playing check-in.")
 
         with self._lock:
             self._waiting_for_response = True
@@ -230,7 +233,7 @@ class AttentionMonitor:
             with self._lock:
                 if self._response_received:
                     self._last_interaction = time.time()
-                    print("[AttentionMonitor] Response received in time.")
+                    logger.info("Response received in time.")
                     return
 
         # No response — confirm distraction
@@ -238,7 +241,7 @@ class AttentionMonitor:
             self._waiting_for_response = False
             self._paused               = True
 
-        print("[AttentionMonitor] No response. Distraction confirmed.")
+        logger.info("No response. Distraction confirmed.")
         self._trigger_distraction()
 
     def _trigger_distraction(self):
@@ -255,13 +258,14 @@ class AttentionMonitor:
         try:
             self._speak_fn(text)
         except Exception as e:
-            print(f"[AttentionMonitor] TTS error: {e}")
+            logger.error("TTS error: %s", e)
 
 
 # ── Quick test ─────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     import sys
+    logging.basicConfig(level=logging.DEBUG)
 
     print("=== Attention Monitor Test ===")
     print("Inactivity threshold: 8 seconds")

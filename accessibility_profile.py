@@ -14,9 +14,12 @@ the rest of the project — it is the clean base layer.
 """
 
 import json
+import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 # ── Profile definitions ────────────────────────────────────────────────────────
@@ -52,10 +55,10 @@ PROFILES = {
         name                   = "standard",
         camera_enabled         = True,
         head_pose_weight       = 0.7,
-        stt_primary            = True,
+        stt_primary            = False,
         key_presses_enabled    = True,
         camera_sensitivity     = "low",
-        checkin_response_window = 20,
+        checkin_response_window = 15,
     ),
 
     "low_vision": AccessibilityProfile(
@@ -65,7 +68,7 @@ PROFILES = {
         stt_primary            = True,       # voice is primary interaction
         key_presses_enabled    = False,      # never ask to press anything
         camera_sensitivity     = "low",
-        checkin_response_window = 25,        # give more time to respond
+        checkin_response_window = 20,        # give more time to respond
     ),
 
     "blind": AccessibilityProfile(
@@ -75,7 +78,7 @@ PROFILES = {
         stt_primary            = True,
         key_presses_enabled    = False,
         camera_sensitivity     = "low",      # irrelevant but kept for consistency
-        checkin_response_window = 30,        # most generous response window
+        checkin_response_window = 25,        # most generous response window
     ),
 }
 
@@ -142,7 +145,7 @@ PROMPTS = {
     "distraction_confirmed":
         "يمكن اتشتت شوية. خليني أوقف الجلسة دلوقتي.",
     "resume_prompt":
-        "أهلاً! رجعت تاني. هنكمل من حيث ما وقفنا.",
+        "أهلاً! رجعت تاني. هنكمل من حيث وقفنا.",
     "false_positive_offer":
         "لو الجلسة بتوقف كتير من غير ما تتشتت، قولي وهنضبطها.",
 
@@ -197,7 +200,7 @@ def load_user_profile() -> dict:
         return profile
 
     except (json.JSONDecodeError, IOError) as e:
-        print(f"[AccessibilityProfile] Could not load profile: {e}. Using defaults.")
+        logger.warning("Could not load profile: %s. Using defaults.", e)
         return dict(DEFAULT_USER_PROFILE)
 
 
@@ -209,9 +212,9 @@ def save_user_profile(profile: dict):
     try:
         with open(USER_PROFILE_PATH, "w", encoding="utf-8") as f:
             json.dump(profile, f, indent=2, ensure_ascii=False)
-        print(f"[AccessibilityProfile] Profile saved → {USER_PROFILE_PATH}")
+        logger.info("Profile saved → %s", USER_PROFILE_PATH)
     except IOError as e:
-        print(f"[AccessibilityProfile] Could not save profile: {e}")
+        logger.error("Could not save profile: %s", e)
 
 
 def get_profile(name: str) -> AccessibilityProfile:
@@ -220,7 +223,7 @@ def get_profile(name: str) -> AccessibilityProfile:
     Falls back to standard if name is unrecognised.
     """
     if name not in PROFILES:
-        print(f"[AccessibilityProfile] Unknown profile '{name}', using 'standard'.")
+        logger.warning("Unknown profile '%s', using 'standard'.", name)
         return PROFILES["standard"]
     return PROFILES[name]
 
