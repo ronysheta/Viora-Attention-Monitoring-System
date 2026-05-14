@@ -7,15 +7,25 @@ Uses continuous recognition with the ar-EG (Egyptian Arabic) locale.
 Designed to run only during an active focus session — started and stopped
 by FocusSession, not by the app.
 
-The get_latest_text() method is passed as stt_fn to the attention monitors.
-It returns the latest recognized text and clears it, so each result is
-consumed exactly once.
+Uses a callback system so multiple consumers (monitor + router) each
+receive every STT result independently without consuming each other's text.
+
+Usage:
+    stt = STTHandler()
+
+    # Register as many callbacks as needed
+    stt.add_callback(monitor.on_speech)
+    stt.add_callback(router.on_speech)
+
+    stt.start()
+    stt.stop()
 """
 
 import os
 import logging
 import azure.cognitiveservices.speech as speechsdk
 from dotenv import load_dotenv
+from typing import Callable, List
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -24,7 +34,7 @@ logger = logging.getLogger(__name__)
 class STTHandler:
 
     def __init__(self):
-        self._latest_text = None
+        self._callbacks: List[Callable[[str], None]] = []
 
         key    = os.getenv("AZURE_SPEECH_KEY")
         region = os.getenv("AZURE_SPEECH_REGION")
@@ -47,13 +57,23 @@ class STTHandler:
             audio_config  = audio_config,
         )
 
-        # Fires every time Azure finalizes a speech segment
         self._recognizer.recognized.connect(self._on_recognized)
         self._recognizer.canceled.connect(self._on_canceled)
 
         logger.info("STTHandler initialized. Locale: %s | Region: %s", locale, region)
 
     # ── Public API ─────────────────────────────────────────────────────────────
+
+    def add_callback(self, fn: Callable[[str], None]):
+        """
+        Register a callback that receives every recognized text result.
+        Call this before start() — both monitor and router register here.
+
+        Example:
+            stt.add_callback(lambda text: monitor.on_speech(text))
+            stt.add_callback(lambda text: router.on_speech(text))
+        """
+        self._callbacks.append(fn)
 
     def start(self):
         """Start continuous listening. Called by FocusSession.start()."""
@@ -65,16 +85,6 @@ class STTHandler:
         self._recognizer.stop_continuous_recognition()
         logger.info("STT stopped.")
 
-    def get_latest_text(self):
-        """
-        Returns the latest recognized text and clears it.
-        Returns None if nothing was recognized since last call.
-        Passed as stt_fn to the attention monitors.
-        """
-        text           = self._latest_text
-        self._latest_text = None
-        return text
-
     # ── Internal callbacks ─────────────────────────────────────────────────────
 
     def _on_recognized(self, evt):
@@ -82,7 +92,12 @@ class STTHandler:
             text = evt.result.text.strip()
             if text:
                 logger.debug("Recognized: '%s'", text)
-                self._latest_text = text
+                # Fire all registered callbacks with the same text
+                for fn in self._callbacks:
+                    try:
+                        fn(text)
+                    except Exception as e:
+                        logger.error("STT callback error: %s", e)
 
     def _on_canceled(self, evt):
         logger.warning("STT recognition canceled: %s", evt.reason)

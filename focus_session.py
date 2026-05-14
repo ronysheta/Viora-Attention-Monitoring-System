@@ -164,13 +164,22 @@ class FocusSession:
         # ── STT — Azure, owned and managed internally by FocusSession ─────────
         # Started in start(), stopped in _end_session()
         # Whisper handles STT for the rest of the app — Azure is only for sessions
-        self._stt = None
-        self._stt_fn = None
+        self._stt    = None
+        self._router = None
         try:
             from stt_handler import STTHandler
+            from voice_command_router import VoiceCommandRouter
+
             self._stt    = STTHandler()
-            self._stt_fn = self._stt.get_latest_text
-            logger.info("Azure STT initialized successfully.")
+            self._router = VoiceCommandRouter(
+                session = self,
+                stt_fn  = None,   # router uses callbacks, not polling
+            )
+
+            # Register callbacks — both monitor and router get every STT result
+            self._stt.add_callback(self._on_stt_text)
+
+            logger.info("Azure STT and VoiceCommandRouter initialized.")
         except Exception as e:
             logger.warning(
                 "Could not initialize Azure STT: %s. "
@@ -209,6 +218,8 @@ class FocusSession:
         Build the right monitor based on accessibility profile.
         blind profile → always no-camera.
         standard/low_vision → camera, with auto-fallback if it fails.
+        Monitors no longer need stt_fn — speech reaches them via
+        _on_stt_text callback which calls register_interaction() directly.
         """
         profile = self._profile
 
@@ -224,7 +235,7 @@ class FocusSession:
             on_distraction       = self._on_distraction,
             on_resume            = self._on_resume,
             speak_fn             = self._speak_fn,
-            stt_fn               = self._stt_fn,
+            stt_fn               = None,
             inactivity_threshold = ATTENTION_DEFAULTS["inactivity_threshold_seconds"],
             response_window      = profile.checkin_response_window,
             key_presses_enabled  = profile.key_presses_enabled,
@@ -241,7 +252,7 @@ class FocusSession:
             on_distraction       = self._on_distraction,
             on_resume            = self._on_resume,
             speak_fn             = self._speak_fn,
-            stt_fn               = self._stt_fn,
+            stt_fn               = None,
             inactivity_threshold = ATTENTION_DEFAULTS["inactivity_threshold_seconds"],
             response_window      = profile.checkin_response_window,
             key_presses_enabled  = profile.key_presses_enabled,
@@ -250,12 +261,26 @@ class FocusSession:
     # ── Public API ─────────────────────────────────────────────────────────────
 
     def start(self):
-        """Start the session and Azure STT."""
+        """Start the session, Azure STT, and voice command router."""
         self._started_at = datetime.now().isoformat()
         if self._stt:
             self._stt.start()
+        if self._router:
+            self._router.start()
         self._speak(PROMPTS["session_start"])
         self._start_focus_block()
+
+    def _on_stt_text(self, text: str):
+        """
+        Callback fired by STTHandler for every recognized speech result.
+        Routes to both the monitor (presence detection) and the router
+        (command detection) so neither consumes the other's result.
+        """
+        # 1. Always register as interaction — proves user is present
+        self._monitor.register_interaction()
+        # 2. Let the router decide if it's a command
+        if self._router:
+            self._router.handle(text)
 
     def register_interaction(self):
         """Call on any user key press or button tap."""
@@ -349,6 +374,8 @@ class FocusSession:
         self._set_state(ENDED)
         self._stop_timer()
         self._monitor.stop()
+        if self._router:
+            self._router.stop()
         if self._stt:
             self._stt.stop()
 
