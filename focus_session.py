@@ -17,6 +17,8 @@ Changes from v1:
   - logging throughout instead of print
   - user_profile loaded and saved via accessibility_profile helpers
   - remaining_time initialised properly to avoid AttributeError
+  - pause_tracking/resume_tracking called on break start/focus start
+  - _stop_timer fixed to avoid RuntimeError when joining current thread
 
 Usage:
     from focus_session import FocusSession
@@ -336,6 +338,8 @@ class FocusSession:
         self._set_state(FOCUSING)
         self._block_start   = time.time()
         self.remaining_time = None
+        # Resume attention tracking when focus block starts
+        self._monitor.resume_tracking()
         self._speak(PROMPTS["block_start"])
 
         if self._blocks_completed == 0:
@@ -359,6 +363,8 @@ class FocusSession:
         self._set_state(ON_BREAK)
         self._break_start = time.time()
         self._breaks_taken += 1
+        # Pause attention tracking during break — user is supposed to be away
+        self._monitor.pause_tracking()
         self._speak(PROMPTS["break_start"])
         self._start_timer(self._break_duration(), self._on_break_end)
 

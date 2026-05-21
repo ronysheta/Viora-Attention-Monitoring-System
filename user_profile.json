@@ -1,0 +1,8 @@
+{
+  "accessibility_profile": "standard",
+  "preferred_mode": "free",
+  "focus_mins": 2,
+  "break_mins": 1,
+  "camera_enabled": true,
+  "first_time": false
+}

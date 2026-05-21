@@ -110,17 +110,18 @@ class CameraAttentionMonitor:
 
     def __init__(
         self,
-        on_distraction: Optional[Callable]             = None,
-        on_resume: Optional[Callable]                  = None,
-        speak_fn: Optional[Callable[[str], None]]      = None,
-        stt_fn: Optional[Callable[[], Optional[str]]]  = None,
-        inactivity_threshold: int                       = 90,
-        response_window: int                            = 15,
-        key_presses_enabled: bool                       = True,
-        head_pose_weight: float                         = 0.7,
-        sensitivity: str                                = "low",
-        camera_source                                   = 0,
-        frame_source: Optional[Callable]                = None,
+        on_distraction: Optional[Callable] = None,
+        on_resume: Optional[Callable] = None,
+        speak_fn: Optional[Callable[[str], None]] = None,
+        stt_fn: Optional[Callable[[], Optional[str]]] = None,
+        inactivity_threshold: int = 90,
+        response_window: int = 15,
+        key_presses_enabled: bool = True,
+        head_pose_weight: float = 0.7,
+        sensitivity: str = "low",
+        camera_source = 0,
+        frame_source: Optional[Callable] = None,
+        _tracking_paused = False,
     ):
         """
         Parameters
@@ -274,6 +275,21 @@ class CameraAttentionMonitor:
 
         if was_paused:
             self._resume_session(triggered_by="interaction")
+    
+    def pause_tracking(self):
+        """Pause distraction detection during breaks."""
+        with self._lock:
+            self._tracking_paused = True
+            self._score_window.clear()
+        logger.info("Attention tracking paused.")
+
+    def resume_tracking(self):
+        """Resume distraction detection when focus block starts."""
+        with self._lock:
+            self._tracking_paused  = False
+            self._last_interaction = time.time()
+            self._score_window.clear()
+        logger.info("Attention tracking resumed.")
 
     # ── STT polling loop ───────────────────────────────────────────────────────
 
@@ -360,7 +376,10 @@ class CameraAttentionMonitor:
             in_cooldown = (time.time() - self._last_distraction_time) < COOLDOWN_SECS
         if in_cooldown:
             return
-
+        # Don't score during breaks
+        with self._lock:
+            if self._tracking_paused:
+                return
         # Score and check window
         score = self._score_frame(landmarks, w, h)
         self._score_window.append(score)
@@ -552,10 +571,11 @@ class CameraAttentionMonitor:
             with self._lock:
                 elapsed     = time.time() - self._last_interaction
                 paused      = self._paused
+                tracking_paused  = self._tracking_paused
                 last_face   = self._last_face_time
                 in_cooldown = (time.time() - self._last_distraction_time) < COOLDOWN_SECS
 
-            if paused or in_cooldown:
+            if paused or in_cooldown or tracking_paused:
                 continue
 
             face_missing = (

@@ -16,15 +16,6 @@ When the user responds after a pause, `on_resume` is fired.
 All prompts are in Egyptian Arabic dialect, sourced from
 accessibility_profile.py.
 
-Changes from v1:
-  - Added `on_resume` callback (was missing entirely)
-  - Added `stt_fn` — any detected speech auto-calls register_interaction()
-  - Added `key_presses_enabled` — if False, never mention pressing anything
-  - Check-in response now detected via STT as well as key press
-  - All messages sourced from accessibility_profile.PROMPTS
-  - Added STT polling loop running alongside the inactivity loop
-  - Added paused state so resume is handled cleanly
-
 Usage:
     from accessibility_profile import PROMPTS
     from attention_monitor import AttentionMonitor
@@ -55,13 +46,14 @@ class AttentionMonitor:
 
     def __init__(
         self,
-        on_distraction: Optional[Callable]        = None,
-        on_resume: Optional[Callable]             = None,
+        on_distraction: Optional[Callable] = None,
+        on_resume: Optional[Callable] = None,
         speak_fn: Optional[Callable[[str], None]] = None,
         stt_fn: Optional[Callable[[], Optional[str]]] = None,
-        inactivity_threshold: int                  = 90,
-        response_window: int                       = 15,
-        key_presses_enabled: bool                  = True,
+        inactivity_threshold: int = 90,
+        response_window: int = 15,
+        key_presses_enabled: bool = True,
+        _tracking_paused = False,
     ):
         """
         Parameters
@@ -163,6 +155,19 @@ class AttentionMonitor:
             self._speak(PROMPTS["resume_prompt"])
             if self.on_resume:
                 self.on_resume()
+
+    def pause_tracking(self):
+        """Pause distraction detection during breaks."""
+        with self._lock:
+            self._tracking_paused = True
+        logger.info("Attention tracking paused.")
+
+    def resume_tracking(self):
+        """Resume distraction detection when focus block starts."""
+        with self._lock:
+            self._tracking_paused  = False
+            self._last_interaction = time.time()
+        logger.info("Attention tracking resumed.")
 
     def set_threshold(self, seconds: int):
         """Adjust inactivity threshold at runtime."""

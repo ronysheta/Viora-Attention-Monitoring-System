@@ -3,6 +3,15 @@ logging.basicConfig(level=logging.INFO)
 
 from session_setup import SessionSetup
 from focus_session import FocusSession
+import camera_attention_monitor as cam
+import focus_session as fs
+
+# Shorten for testing
+cam.NO_FACE_TIMEOUT_SECS = 3
+cam.COOLDOWN_SECS        = 5
+cam.CALIBRATION_FRAMES   = 20
+fs.ATTENTION_DEFAULTS["inactivity_threshold_seconds"] = 10
+fs.ATTENTION_DEFAULTS["response_window_seconds"]      = 5
 
 def speak(text):
     print(f"[TTS] {text}")
