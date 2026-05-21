@@ -53,7 +53,6 @@ class AttentionMonitor:
         inactivity_threshold: int = 90,
         response_window: int = 15,
         key_presses_enabled: bool = True,
-        _tracking_paused = False,
     ):
         """
         Parameters
@@ -87,11 +86,12 @@ class AttentionMonitor:
         self._stt_fn   = stt_fn   # None = no STT, rely on key presses only
 
         # ── State ──────────────────────────────────────────────────────────────
-        self._last_interaction      = time.time()
-        self._running               = False
-        self._paused                = False
+        self._last_interaction = time.time()
+        self._running = False
+        self._paused = False
+        self._tracking_paused = False
         self._waiting_for_response  = False
-        self._response_received     = False
+        self._response_received = False
 
         # ── Threads ────────────────────────────────────────────────────────────
         self._monitor_thread        = None

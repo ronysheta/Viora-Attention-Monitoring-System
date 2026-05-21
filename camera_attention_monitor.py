@@ -11,19 +11,6 @@ Detects distraction via:
   - STT voice activity — any detected speech resets the inactivity timer
   - Inactivity fallback — when face is lost entirely (walked away, dark room)
 
-Key improvements over v1:
-  - Calibrates personal head pose baseline so sitting off-centre or having
-    a corner monitor no longer causes false positives
-  - Stability suppression — steady angle at a consistent position is ignored
-  - STT integration — speech auto-registers as interaction
-  - head_pose_weight — can be dialled down for users with limited mobility
-  - Voice-driven check-ins — no key press required if key_presses_enabled=False
-  - Auto fallback to inactivity-only mode if camera fails to open
-  - All prompts sourced from accessibility_profile.PROMPTS in Egyptian Arabic
-  - logging instead of print throughout
-
-Drop-in replacement for AttentionMonitor — identical public interface.
-
 Usage:
     monitor = CameraAttentionMonitor(
         on_distraction      = session.on_distraction,
@@ -53,7 +40,7 @@ from accessibility_profile import PROMPTS
 logger = logging.getLogger(__name__)
 
 
-# ── Sensitivity presets ────────────────────────────────────────────────────────
+# Sensitivity presets
 # Set automatically from AccessibilityProfile — never exposed to the user.
 
 SENSITIVITY_PRESETS = {
@@ -83,7 +70,7 @@ SENSITIVITY_PRESETS = {
     },
 }
 
-# ── Fixed constants ────────────────────────────────────────────────────────────
+# Fixed constants
 EAR_CLOSED_THRESHOLD = 0.20
 EAR_CALIBRATION_MIN  = 0.18
 CALIBRATION_FRAMES   = 60
@@ -91,7 +78,7 @@ NO_FACE_TIMEOUT_SECS = 10
 RESUME_FACE_FRAMES   = 10
 COOLDOWN_SECS        = 20
 
-# ── MediaPipe landmark indices ─────────────────────────────────────────────────
+# MediaPipe landmark indices
 LEFT_EYE    = [33, 160, 158, 133, 153, 144]
 RIGHT_EYE   = [362, 385, 387, 263, 373, 380]
 POSE_POINTS = [1, 152, 33, 263, 61, 291]
@@ -121,7 +108,6 @@ class CameraAttentionMonitor:
         sensitivity: str = "low",
         camera_source = 0,
         frame_source: Optional[Callable] = None,
-        _tracking_paused = False,
     ):
         """
         Parameters
@@ -207,20 +193,20 @@ class CameraAttentionMonitor:
         # ── Distraction scoring window ─────────────────────────────────────────
         self._score_window = deque(maxlen=int(self._window_secs * 10))
 
-        # ── Session state ──────────────────────────────────────────────────────
-        self._running               = False
-        self._paused                = False
-        self._waiting_for_response  = False
-        self._response_received     = False
-        self._last_interaction      = time.time()
-        self._last_face_time        = time.time()
+        # Session state 
+        self._running = False
+        self._paused = False
+        self._waiting_for_response = False
+        self._tracking_paused = False
+        self._response_received = False
+        self._last_interaction = time.time()
+        self._last_face_time = time.time()
         self._last_distraction_time = 0
-        self._face_return_frames    = 0
-
-        self._lock              = threading.Lock()
-        self._camera_thread     = None
+        self._face_return_frames = 0
+        self._lock = threading.Lock()
+        self._camera_thread = None
         self._inactivity_thread = None
-        self._stt_thread        = None
+        self._stt_thread = None
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
